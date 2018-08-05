@@ -1,4 +1,4 @@
-# AFRAME Material Collection.
+# AFRAME In-App Browser
 ![Demo](https://raw.githubusercontent.com/shaneharris/aframe-in-app-browser/master/demo.gif)
 
 This in-app browser uses a headless browser with off-screen rendering as a companion app to paint frames from webpages to a texture in aframe.

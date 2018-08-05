@@ -1,6 +1,8 @@
 # AFRAME In-App Browser
 ![Demo](https://raw.githubusercontent.com/shaneharris/aframe-in-app-browser/master/demo.gif)
 
+This project is still a WIP!
+
 This in-app browser uses a headless browser with off-screen rendering as a companion app to paint frames from webpages to a texture in aframe.
 The companion app is based in electron ( server.js ) and recieves mouse and keyboard events from the front end. This allows for a fully
 isolated browser experience inside of aframe for doing things like Oauth, or just general browsing in VR.

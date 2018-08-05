@@ -1,0 +1,28 @@
+<!doctype html>
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="description" content="">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://aframe.io/releases/0.8.0/aframe.min.js"></script>
+    <script src="aframe-in-app-browser.js"></script>
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>Aframe In-App Browser</title>
+</head>
+<body>
+<a-scene stats>
+    <a-entity id="camera" camera="near:0.1;far:1000"  look-controls > <!--wasd-controls-->
+        <a-entity id="cursor" cursor="rayOrigin: mouse" ui-mouse-shim
+                  raycaster="far: 30; objects: .intersectable;"></a-entity>
+    </a-entity>
+
+    <a-entity light="type: ambient; intensity: 0.5;"></a-entity>
+    <a-box color="#efefef" side="back" scale="10 10 10"></a-box>
+
+    <a-entity position="0 0 -1">
+        <a-plane height="0.1" width="1.7" shader="flat" color="#009688" curved-plane position="0 0.55 0"></a-plane>
+        <a-plane height="1" width="1.7" shader="flat" browser ui-double-click curved-plane class="intersectable"></a-plane>
+    </a-entity>
+</a-scene>
+</body>
+</html>

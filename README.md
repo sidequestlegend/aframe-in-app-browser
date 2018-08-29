@@ -8,6 +8,24 @@ The companion app is based in electron ( server.js ) and recieves mouse and keyb
 isolated browser experience inside of aframe for doing things like Oauth, or just general browsing in VR.
 
 
+
+## Inspiration
+
+I wanted to port my scene editor built in Altspace VR to the browser as a standalone aframe based project. AltspaceVR
+provided a renderTarget based solution allowing you to render a browser to a texture. This project hopes to provide a similar
+solution in that it will support multiple browser plugins to allow you to connect to and remote control a remote browser inside VR.
+
+
+Here is a demo of the new aframe based Shane's Editor that this will be used in:
+![Demo](https://raw.githubusercontent.com/shaneharris/shanes-editor/master/demo.gif)
+
+The Shane's Editor project is also open source and you can get involved at
+[github](https://github.com/shaneharris/shanes-editor), join our
+[discord](https://discord.gg/Q2a5BkZ) or take it for a test drive in the
+[live demo](https://shaneharris.github.io/shanes-editor/)
+
+
+
 I will get a demo in place soon but for now here's the details to get you started.
 
 

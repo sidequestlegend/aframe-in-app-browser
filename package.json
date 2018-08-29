@@ -1,6 +1,6 @@
 {
   "name": "aframe-in-app-browser",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "A progressive in-app browser for aframe using an electron based headless browser companion app.",
   "homepage": "https://github.com/shaneharris/aframe-in-app-browser",
   "main": "server.js",

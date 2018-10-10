@@ -1,9 +1,51 @@
 const {app, BrowserWindow} = require('electron');
 //app.disableHardwareAcceleration();
-const io = require('socket.io')();
+// const io = require('socket.io')();
+const WebSocketServer = require('ws').Server;
+
 class App{
     constructor(){
         app.once('ready', () => this.ready());
+        this._ws = new WebSocketServer({ port: 3443 });
+        this._ws.on('connection', ws=>{
+            this.connected = true;
+            this.client = ws;
+            let socket = this.setupSocket(ws);
+            ws.on('message', message=>{
+                try{
+                    let json = JSON.parse(message);
+                    if(json&&json.path === "event"){
+                        this.win.webContents.sendInputEvent(json.data);
+                    }else if(json&&json.path === "load-url"){
+                        if(typeof json.data === "string"){
+                            if(json.data.substr(0,7)!=="http://"&&json.data.substr(0,8)!=="https://"){
+                                json.data = "http://"+json.data;
+                            }
+                            this.win.webContents.loadURL(json.data);
+                        }
+                    }
+                }catch(e){
+
+                }
+            });
+            ws.on('error', e=>{
+                this.connected = false;
+                console.log(e)
+            });
+            ws.on('close', e=>{
+                this.connected = false;
+                console.log(e)
+            });
+            if(this.win){
+                //this.sendToClient('did-navigate',this.win.webContents.getURL());
+            }
+            if(this.last_paint&&this.connected){
+                this.sendToClient(this.last_paint);
+            }
+        });
+        this._ws.on('error', socket=>{
+            console.log('error',socket);
+        });
     }
     ready(){
         this.win = new BrowserWindow({
@@ -21,38 +63,22 @@ class App{
 
     }
     setupSocket(){
-        io.on('connection', socket=>{
-            this.client = socket;
-            if(this.win){
-                this.sendToClient('did-navigate',this.win.webContents.getURL());
-            }
-            if(this.last_paint){
-                this.sendToClient('frame',this.last_paint);
-            }
-            socket.on('event',event=>{
-                this.win.webContents.sendInputEvent(event);
-            });
-            socket.on('load-url',url_string=>{
-                if(typeof url_string === "string"){
-                    if(url_string.substr(0,7)!=="http://"&&url_string.substr(0,8)!=="https://"){
-                        url_string = "http://"+url_string;
-                    }
-                    this.win.webContents.loadURL(url_string);
-                }
-            });
-        });
-        io.listen(3443);
+        // io.on('connection', socket=>{
+        //     this.client = socket;
+        //
+        // });
+        // io.listen(3443);
     }
     sendToClient(message,data){
-        if(this.client){
-            this.client.emit(message,data);
+        if(this.client&&this.connected){
+            this.client.send(data);
         }
     }
     setupWindow(){
-        this.win.loadURL('https://github.com');
-        this.win.webContents.setFrameRate(15);
+        this.win.loadURL('https://www.youtube.com/watch?v=JynwitCHP4E');
+        this.win.webContents.setFrameRate(30);
         this.win.webContents.on('paint', (event, dirty, image) => {
-            this.last_paint = image.toJPEG(65);
+            this.last_paint = image.toJPEG(75);
             this.sendToClient('frame',this.last_paint);
 
         });

@@ -8,6 +8,7 @@
 
 module.exports = AFRAME.registerComponent('address-bar', {
     schema: {
+
     },
     init() {
         this.setupAddressTexture();

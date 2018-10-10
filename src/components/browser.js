@@ -8,12 +8,16 @@
 
 module.exports = AFRAME.registerComponent('browser', {
     schema: {
+        cameraEl:{type:'selector'}
     },
     init(){
+
+        this.isExokit = false;//!!~window.navigator.userAgent.indexOf('Exokit');
         this.open();
         this.setupSurfaceTexture();
         // Set the material texture to the canvas used for images from the browser
         this.el.getObject3D('mesh').material.map = this.surfaceTexture;
+        this.el.emit('texture-ready');
         // Store binded handlers for registering/unregistering events.
         this.mousemove = this.onMouseMove.bind(this);
         this.mousedown = this.onMouseDown.bind(this);
@@ -23,8 +27,8 @@ module.exports = AFRAME.registerComponent('browser', {
 
         this.keyup = this.onKeyup.bind(this);
         this.keydown = this.onKeydown.bind(this);
-
-        this.camera = document.getElementById('camera');
+        console.time('render');
+        this.camera = this.data.cameraEl;
     },
     play(){
         // Register event listeners for mouse and keyboard.
@@ -82,8 +86,8 @@ module.exports = AFRAME.registerComponent('browser', {
         //     alert('caps is on');
         //     modifiers.push('capsLock');
         // }
-        if(this.socket){
-            this.socket.emit('event',{
+        if(this.isExokit&&this.browserWindow) {
+            this.browserWindow.sendInputEvent({
                 type:type,
                 keyCode:e.key,
                 modifiers:modifiers
@@ -91,11 +95,25 @@ module.exports = AFRAME.registerComponent('browser', {
             // If is an alphanumeric key then send the char event also to get the text to show up in the input fields
             // Do not send if this is a modified keypress i.e. Ctrl+A, Ctrl+V
             if (e.which <= 90 && e.which >= 48&&type==="keyup"&&!modifiers.length){
-                this.socket.emit('event',{
+                this.browserWindow.sendInputEvent({
                     type:'char',
-                    keyCode:e.key,
-                    //modifiers:modifiers
+                    keyCode:e.key
                 });
+            }
+        }else if(this.socket){
+            this.emit({path:'event',data:{
+                type:type,
+                keyCode:e.key,
+                modifiers:modifiers
+            }});
+            // If is an alphanumeric key then send the char event also to get the text to show up in the input fields
+            // Do not send if this is a modified keypress i.e. Ctrl+A, Ctrl+V
+            if (e.which <= 90 && e.which >= 48&&type==="keyup"&&!modifiers.length){
+                this.emit({path:'event',data:{
+                        type:'char',
+                        keyCode:e.key,
+                        //modifiers:modifiers
+                    }});
             }
         }
     },
@@ -153,9 +171,9 @@ module.exports = AFRAME.registerComponent('browser', {
     sendMouseEvent(type,e,mouse){
         let _event;
         let _button;
-        if(event.detail.evt){
+        if(e.detail.evt){
             // Convert the mouse button value to a string for electron webcontents.
-            switch(event.detail.evt.button){
+            switch(e.detail.evt.button){
                 case 0:
                     _button = 'left';
                     break;
@@ -207,13 +225,71 @@ module.exports = AFRAME.registerComponent('browser', {
                 };
                 break;
         }
-        if(_event&&this.socket){
+         if(_event&&this.isExokit&&this.browserWindow) {
+             this.browserWindow.sendInputEvent(_event);
+         }else if(_event&&this.socket) {
             // Send the event to electron over the websocket.
-            this.socket.emit('event',_event);
+            //this.socket.emit('event',_event);
+        this.emit({path:'event',data:_event});
         }
     },
     open(){
-        this.openSocket();
+         if(this.isExokit){
+             this.setupElectron();
+         }else{
+            this.openSocket();
+        }
+    },
+    tick(){
+        console.timeEnd('render');
+        console.time('render');
+    },
+    async setupElectron(){
+        const elctrn = await browser.electron.createElectron();
+        this.browserWindow = await elctrn.createBrowserWindow({
+            width:1024,
+            height:512,
+            show: false,
+            frame: false,
+            webPreferences: {
+                offscreen: true,
+                transparent: true,
+            },
+        });
+
+        this.canvas.width = this.browserWindow.width;
+        this.canvas.height = this.browserWindow.height;
+        this.browserWindow.loadURL('https://www.youtube.com/watch?v=JynwitCHP4E');
+        this.browserWindow.setFrameRate(12);
+
+        this.browserWindow.on('paint', o => {
+            console.timeEnd('clientReceives');
+            console.time('clientReceives');
+            let ctx = this.canvas.getContext('2d');
+            ctx.putImageData(new ImageData(o.data, o.width, o.height), o.x, o.y );
+            this.surfaceTexture.needsUpdate = true;
+        });
+
+        this.browserWindow.on('dom-ready', async () => {
+            await this.browserWindow.insertCSS(`
+                ::-webkit-scrollbar {
+                  height: 30px;
+                  width: 30px;
+                  background: #e0e0e0;
+                }
+                ::-webkit-scrollbar-thumb {
+                  background: #4db6ac;
+                }
+                ::-webkit-scrollbar-corner {
+                  background: #cfcfcf;
+                }
+        `);
+        });
+        this.browserWindow.on('did-fail-load', () => {
+            console.log('failed to load!');
+            // browserWindow.destroy();
+            // elctrn.destroy();
+        });
     },
     close(){
         this.closeSocket()
@@ -223,24 +299,54 @@ module.exports = AFRAME.registerComponent('browser', {
         this.canvas = document.createElement('canvas');
         this.canvas.width = 1024;
         this.canvas.height = 512;
-        this.surfaceTexture = new THREE.Texture(this.canvas);
+        this.surfaceTexture = new THREE.Texture(this.canvas/*,
+            THREE.UVMapping,
+            THREE.ClampToEdgeWrapping,
+            THREE.ClampToEdgeWrapping,
+            THREE.NearestFilter,
+            THREE.NearestFilter,
+            THREE.RGBAFormat,
+            THREE.UnsignedByteType,
+            1*/);
     },
     openSocket(){
         // Connect to the websocket
-        this.socket = io.connect('http://localhost:3443');
+        this.url = 'ws://localhost:3443';
+        this.openResolves = [];
         this.is_disconnected = false;
-        this.setupSocket();
+        this.setupWebsocket();
     },
-    setupSocket(){
-        let mesh = this.el.getObject3D('mesh');
-        this.socket.on('connect_error', ()=>{
-            // Show message to download companion app if connection fails
-            // TODO: Use a custom protocol for opening the companion if already installed.
-            this.showDownloadMessage();
-        });
-        this.socket.on('frame', buffer=>{
-            // Receive a jpeg buffer frame from the websocket server in the companion app.
-            let blob = new Blob([buffer], {type: "image/jpeg"});
+    constructor(){
+        this.setupWebsocket();
+    },
+    async emit(msg){
+        this.ws.send(JSON.stringify(msg));
+    },
+    setupWebsocket(){
+        this.ws = new WebSocket(this.url);
+        this.ws.onopen = evt=>this.onOpen(evt);
+        this.ws.onclose = evt=>this.onClose(evt);
+        this.ws.onmessage = evt=>this.onMessage(evt);
+        this.ws.onerror = evt=>console.error(evt);
+        console.time('websocket');
+    },
+    onOpen(){
+        this.openResolves.forEach(fn=>fn());
+        console.log('Connected to Expanse Browser');
+        this.emit('state');
+        this.is_disconnected = false;
+    },
+    onClose(evt){
+        console.log('Connection to Expanse Browser closed. Reconnecting in 2s ...',evt);
+        this.is_disconnected = true;
+        setTimeout(()=>this.setupWebsocket(this.url),2000);
+    },
+    onMessage(evt){
+        try{
+            console.timeEnd('websocket');
+            console.time('websocket');
+            let blob = new Blob([evt.data], {type: "image/jpeg"});
+
             let ctx = this.canvas.getContext('2d');
             // Create an image to show the frame and copy to the canvas
             let img = new Image();
@@ -251,16 +357,45 @@ module.exports = AFRAME.registerComponent('browser', {
                 this.surfaceTexture.needsUpdate = true;
             };
             // Creat url from the image blob
-            img.src = URL.createObjectURL(blob);
-        });
-    },
-    closeSocket(){
-        if(this.socket){
-            // Disconnect and delete the socket.
-            this.socket.disconnect();
-            this.is_disconnected = true;
-            this.socket = null;
+            if(blob.size){
+                img.src = URL.createObjectURL(blob);
+            }
+        }catch(e){
+            console.warn(e);
         }
+    },
+    // setupSocket(){
+    //     let mesh = this.el.getObject3D('mesh');
+    //     this.socket.on('connect_error', e=>{
+    //         // Show message to download companion app if connection fails
+    //         // TODO: Use a custom protocol for opening the companion if already installed.
+    //         //this.showDownloadMessage();
+    //         console.log('connect error',e);
+    //     });
+    //     this.socket.on('frame', buffer=>{
+    //         console.log('frame');
+    //         // Receive a jpeg buffer frame from the websocket server in the companion app.
+    //         let blob = new Blob([buffer], {type: "image/jpeg"});
+    //         let ctx = this.canvas.getContext('2d');
+    //         // Create an image to show the frame and copy to the canvas
+    //         let img = new Image();
+    //         img.onload = ()=>{
+    //             // Draw the frame to the temp canvas.
+    //             ctx.drawImage(img, 0, 0, 1024, 512, 0, 0, 1024, 512);
+    //             // Set the update flag
+    //             this.surfaceTexture.needsUpdate = true;
+    //         };
+    //         // Creat url from the image blob
+    //         img.src = URL.createObjectURL(blob);
+    //     });
+    // },
+    closeSocket(){
+        // if(this.socket){
+        //     // Disconnect and delete the socket.
+        //     this.socket.disconnect();
+        //     this.is_disconnected = true;
+        //     this.socket = null;
+        // }
     },
     showDownloadMessage(){
         // TODO: Show message to download companion app.

@@ -12,7 +12,7 @@ module.exports = AFRAME.registerComponent('browser', {
     },
     init(){
 
-        this.isExokit = false;//!!~window.navigator.userAgent.indexOf('Exokit');
+        this.isExokit = !!~window.navigator.userAgent.indexOf('Exokit');
         this.open();
         this.setupSurfaceTexture();
         // Set the material texture to the canvas used for images from the browser
@@ -328,7 +328,6 @@ module.exports = AFRAME.registerComponent('browser', {
         this.ws.onclose = evt=>this.onClose(evt);
         this.ws.onmessage = evt=>this.onMessage(evt);
         this.ws.onerror = evt=>console.error(evt);
-        console.time('websocket');
     },
     onOpen(){
         this.openResolves.forEach(fn=>fn());
@@ -343,8 +342,6 @@ module.exports = AFRAME.registerComponent('browser', {
     },
     onMessage(evt){
         try{
-            console.timeEnd('websocket');
-            console.time('websocket');
             let blob = new Blob([evt.data], {type: "image/jpeg"});
 
             let ctx = this.canvas.getContext('2d');

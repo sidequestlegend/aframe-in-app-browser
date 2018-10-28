@@ -11,45 +11,51 @@ module.exports = AFRAME.registerComponent('browser', {
         cameraEl:{type:'selector'}
     },
     init(){
-
-        this.isExokit = !!~window.navigator.userAgent.indexOf('Exokit');
+        this.isExokit = false;//!!~window.navigator.userAgent.indexOf('Exokit');
         this.open();
         this.setupSurfaceTexture();
         // Set the material texture to the canvas used for images from the browser
         this.el.getObject3D('mesh').material.map = this.surfaceTexture;
         this.el.emit('texture-ready');
         // Store binded handlers for registering/unregistering events.
+        this.click = this.mouseEvent.bind(this,'click');
         this.mousemove = this.onMouseMove.bind(this);
-        this.mousedown = this.onMouseDown.bind(this);
-        this.mouseup = this.onMouseUp.bind(this);
-        this.dblclick = this.onDoubleClick.bind(this);
-        this.mousewheel = this.onMouseWheel.bind(this);
+        this.mousedown = this.mouseEvent.bind(this,'mousedown');
+        this.mouseup = this.mouseEvent.bind(this,'mouseup');
+        this.mousewheel = this.mouseEvent.bind(this,'mousewheel');
 
         this.keyup = this.onKeyup.bind(this);
         this.keydown = this.onKeydown.bind(this);
-        console.time('render');
+        this.el.sendMessage = this.sendMessage.bind(this);
         this.camera = this.data.cameraEl;
     },
     play(){
         // Register event listeners for mouse and keyboard.
         this.el.addEventListener( 'ui-mousemove', this.mousemove, false );
+        this.el.addEventListener( 'click', this.click, false );
         this.el.addEventListener( 'mousedown', this.mousedown, false );
         this.el.addEventListener( 'mouseup', this.mouseup, false );
         this.el.addEventListener( 'touchstart', this.mousedown, false );
         this.el.addEventListener( 'touchend', this.mouseup, false );
-        this.el.addEventListener( 'dblclick', this.dblclick, false);
         this.el.addEventListener( 'ui-mousewheel', this.mousewheel, false);
         document.addEventListener('keyup', this.keyup, false);
         document.addEventListener('keydown', this.keydown, false);
     },
+    sendMessage(message){
+        if(this.isExokit&&this.browserWindow) {
+
+        }else if(!this.is_disconnected){
+            this.emit(message);
+        }
+    },
     pause(){
         // Unregister event listeners for mouse and keyboard.
         this.el.removeEventListener('ui-mousemove',this.mousemove);
+        this.el.removeEventListener('click',this.click);
         this.el.removeEventListener('mousedown',this.mousedown);
         this.el.removeEventListener('mouseup',this.mouseup);
         this.el.removeEventListener('touchstart',this.mousedown);
         this.el.removeEventListener('touchend',this.mouseup);
-        this.el.removeEventListener( 'dblclick', this.dblclick);
         this.el.removeEventListener( 'ui-mousewheel', this.mousewheel);
         document.removeEventListener('keyup', this.keyup);
         document.removeEventListener('keydown', this.keydown);
@@ -61,6 +67,10 @@ module.exports = AFRAME.registerComponent('browser', {
         this.keyEvent('keydown',e);
     },
     keyEvent(type,e){
+        // Skip key events for modifier keys
+        if(~[16,17,18].indexOf(e.which)){
+            return e.preventDefault();
+        }
         // Setup modifiers array and populate form the key events.
         let modifiers = [];
         if(e.ctrlKey){
@@ -72,7 +82,7 @@ module.exports = AFRAME.registerComponent('browser', {
         if(e.metaKey){
             modifiers.push('meta');
         }
-        if(e.shiftKey){
+        if(e.shiftKey&&~[9,33,34,37,38,39,40].indexOf(e.which)){
             modifiers.push('shift');
         }
         if(e.repeat){
@@ -90,7 +100,7 @@ module.exports = AFRAME.registerComponent('browser', {
             this.browserWindow.sendInputEvent({
                 type:type,
                 keyCode:e.key,
-                modifiers:modifiers
+                modifiers:[]//modifiers
             });
             // If is an alphanumeric key then send the char event also to get the text to show up in the input fields
             // Do not send if this is a modified keypress i.e. Ctrl+A, Ctrl+V
@@ -100,53 +110,40 @@ module.exports = AFRAME.registerComponent('browser', {
                     keyCode:e.key
                 });
             }
-        }else if(this.socket){
+        }else if(!this.is_disconnected){
             this.emit({path:'event',data:{
-                type:type,
-                keyCode:e.key,
-                modifiers:modifiers
-            }});
+                    type:type,
+                    keyCode:e.key,
+                    modifiers:modifiers
+                }});
             // If is an alphanumeric key then send the char event also to get the text to show up in the input fields
             // Do not send if this is a modified keypress i.e. Ctrl+A, Ctrl+V
-            if (e.which <= 90 && e.which >= 48&&type==="keyup"&&!modifiers.length){
+            //e.which <= 90 && e.which >= 48&&
+            if (type==="keyup"&&!modifiers.length&&!~[9,20,33,34,37,38,39,40].indexOf(e.which)){
                 this.emit({path:'event',data:{
                         type:'char',
                         keyCode:e.key,
-                        //modifiers:modifiers
+                        modifiers:modifiers
                     }});
             }
         }
+        e.preventDefault();
     },
     onMouseMove(e){
         // Store the last point of the mouse movement. Mousedown/mouseup events don't appear to update
         // the intersection point from the raycaster.
         // TODO: file a PR with aframe to fix this issue and add mousemove, mousewheel and doubleclick events.
         if(e.detail.intersection){
-            this.last_move_point = e.detail.intersection.point;
+            this.last_move_point = e.detail.intersection.point.clone();
         }
-        //Throttle the mouse move events to only fire every 50 ms.
-        if(new Date().getTime()-this.lastMoveTime<50)return;
         this.mouseEvent('mousemove',e);
-        this.lastMoveTime = new Date().getTime();
-    },
-    onMouseUp(e){
-        this.mouseEvent('mouseup',e);
-    },
-    onMouseDown(e){
-        this.mouseEvent('mousedown',e);
-    },
-    onDoubleClick(e){
-        // Handle doubleclick??
-        console.log('onDoubleClick',e);
-    },
-    onMouseWheel(e){
-        this.mouseEvent('mousewheel',e);
     },
     mouseEvent(type,e){
         let mouse = {x:0,y:0};
-        if(e.detail.intersection){
+        if(this.last_move_point){
             // Convert the intersection point from world to local coordinates.
-            let localPoint = this.el.object3D.worldToLocal(this.last_move_point||e.detail.intersection.point);
+            let localPoint = this.el.object3D.worldToLocal(this.last_move_point.clone());
+            // console.log(localPoint);
             // Normalise the point in the range of the companion app resolution 1080X640
             mouse = {
                 x:((localPoint.x+(this.el.getAttribute('width')/2))/this.el.getAttribute('width'))*1080,
@@ -225,24 +222,26 @@ module.exports = AFRAME.registerComponent('browser', {
                 };
                 break;
         }
-         if(_event&&this.isExokit&&this.browserWindow) {
-             this.browserWindow.sendInputEvent(_event);
-         }else if(_event&&this.socket) {
+        if(_event&&this.isExokit&&this.browserWindow) {
+            this.browserWindow.sendInputEvent(_event);
+        }else if(_event&&!this.is_disconnected) {
             // Send the event to electron over the websocket.
             //this.socket.emit('event',_event);
-        this.emit({path:'event',data:_event});
-        }
-    },
-    open(){
-         if(this.isExokit){
-             this.setupElectron();
-         }else{
-            this.openSocket();
+            //console.log(_event);
+            this.emit({path:'event',data:_event});
         }
     },
     tick(){
-        console.timeEnd('render');
-        console.time('render');
+        // console.timeEnd('render');
+        // console.time('render');
+    },
+    open(){
+        if(this.isExokit){
+            this.setupElectron();
+        }else{
+            this.is_disconnected = true;
+            this.openSocket();
+        }
     },
     async setupElectron(){
         const elctrn = await browser.electron.createElectron();
@@ -260,14 +259,35 @@ module.exports = AFRAME.registerComponent('browser', {
         this.canvas.width = this.browserWindow.width;
         this.canvas.height = this.browserWindow.height;
         this.browserWindow.loadURL('https://www.youtube.com/watch?v=JynwitCHP4E');
-        this.browserWindow.setFrameRate(12);
+        this.browserWindow.setFrameRate(30);
 
+        let ctx = this.canvas.getContext('2d');
         this.browserWindow.on('paint', o => {
-            console.timeEnd('clientReceives');
-            console.time('clientReceives');
-            let ctx = this.canvas.getContext('2d');
-            ctx.putImageData(new ImageData(o.data, o.width, o.height), o.x, o.y );
-            this.surfaceTexture.needsUpdate = true;
+            // console.time('putImageData');
+            // ctx.putImageData(new ImageData(o.data, o.width, o.height), o.x, o.y );
+            // console.timeEnd('putImageData');
+            // this.surfaceTexture.needsUpdate = true;
+            try{
+                console.time('putImageData');
+                let blob = new Blob([o.data], {type: "image/jpeg"});
+
+                let ctx = this.canvas.getContext('2d');
+                // Create an image to show the frame and copy to the canvas
+                let img = new Image();
+                img.onload = ()=>{
+                    // Draw the frame to the temp canvas.
+                    ctx.drawImage(img, 0, 0, 1080, 640, 0, 0, 1024, 512);
+                    // Set the update flag
+                    this.surfaceTexture.needsUpdate = true;
+                    console.timeEnd('putImageData');
+                };
+                // Create url from the image blob
+                if(blob.size){
+                    img.src = URL.createObjectURL(blob);
+                }
+            }catch(e){
+                console.warn(e);
+            }
         });
 
         this.browserWindow.on('dom-ready', async () => {
@@ -313,14 +333,16 @@ module.exports = AFRAME.registerComponent('browser', {
         // Connect to the websocket
         this.url = 'ws://localhost:3443';
         this.openResolves = [];
-        this.is_disconnected = false;
         this.setupWebsocket();
     },
     constructor(){
         this.setupWebsocket();
     },
     async emit(msg){
-        this.ws.send(JSON.stringify(msg));
+        if(!this.is_disconnected){
+            this.ws.send(JSON.stringify(msg));
+        }
+
     },
     setupWebsocket(){
         this.ws = new WebSocket(this.url);
@@ -332,7 +354,7 @@ module.exports = AFRAME.registerComponent('browser', {
     onOpen(){
         this.openResolves.forEach(fn=>fn());
         console.log('Connected to Expanse Browser');
-        this.emit('state');
+        //this.emit('state');
         this.is_disconnected = false;
     },
     onClose(evt){
@@ -341,51 +363,36 @@ module.exports = AFRAME.registerComponent('browser', {
         setTimeout(()=>this.setupWebsocket(this.url),2000);
     },
     onMessage(evt){
-        try{
-            let blob = new Blob([evt.data], {type: "image/jpeg"});
-
-            let ctx = this.canvas.getContext('2d');
-            // Create an image to show the frame and copy to the canvas
-            let img = new Image();
-            img.onload = ()=>{
-                // Draw the frame to the temp canvas.
-                ctx.drawImage(img, 0, 0, 1080, 640, 0, 0, 1024, 512);
-                // Set the update flag
-                this.surfaceTexture.needsUpdate = true;
-            };
-            // Creat url from the image blob
-            if(blob.size){
-                img.src = URL.createObjectURL(blob);
+        if(typeof evt.data === "string"){
+            try{
+                let json = JSON.parse(evt.data);
+                this.el.emit('browserMessage',json);
+            }catch(e){
+                console.warn(e);
             }
-        }catch(e){
-            console.warn(e);
+        }else{
+            try{
+                let blob = new Blob([evt.data], {type: "image/jpeg"});
+
+                let ctx = this.canvas.getContext('2d');
+                // Create an image to show the frame and copy to the canvas
+                let img = new Image();
+                img.onload = ()=>{
+                    // Draw the frame to the temp canvas.
+                    ctx.drawImage(img, 0, 0, 1080, 640, 0, 0, 1024, 512);
+                    // Set the update flag
+                    this.surfaceTexture.needsUpdate = true;
+                };
+                // Create url from the image blob
+                if(blob.size){
+                    img.src = URL.createObjectURL(blob);
+                }
+            }catch(e){
+                console.warn(e);
+            }
         }
+
     },
-    // setupSocket(){
-    //     let mesh = this.el.getObject3D('mesh');
-    //     this.socket.on('connect_error', e=>{
-    //         // Show message to download companion app if connection fails
-    //         // TODO: Use a custom protocol for opening the companion if already installed.
-    //         //this.showDownloadMessage();
-    //         console.log('connect error',e);
-    //     });
-    //     this.socket.on('frame', buffer=>{
-    //         console.log('frame');
-    //         // Receive a jpeg buffer frame from the websocket server in the companion app.
-    //         let blob = new Blob([buffer], {type: "image/jpeg"});
-    //         let ctx = this.canvas.getContext('2d');
-    //         // Create an image to show the frame and copy to the canvas
-    //         let img = new Image();
-    //         img.onload = ()=>{
-    //             // Draw the frame to the temp canvas.
-    //             ctx.drawImage(img, 0, 0, 1024, 512, 0, 0, 1024, 512);
-    //             // Set the update flag
-    //             this.surfaceTexture.needsUpdate = true;
-    //         };
-    //         // Creat url from the image blob
-    //         img.src = URL.createObjectURL(blob);
-    //     });
-    // },
     closeSocket(){
         // if(this.socket){
         //     // Disconnect and delete the socket.

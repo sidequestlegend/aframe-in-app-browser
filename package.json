@@ -11,7 +11,7 @@
   ],
   "scripts": {
     "start": "node_modules/.bin/concurrently \"webpack-dev-server --mode development\" \"npm run start-electron\"",
-    "start-electron": "node_modules/.bin/electron .",
+    "start-electron": "node_modules/.bin/electron --remote-debugging-port=8315 . ",
     "build": "webpack --mode production"
   },
   "repository": {

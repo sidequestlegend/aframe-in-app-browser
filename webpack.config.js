@@ -15,7 +15,7 @@ module.exports = {
     devServer: {
         stats: "errors-only",
         contentBase: __dirname+"/dist",
-        open:true
+        //open:true
     },
     optimization: {
         minimize: true,

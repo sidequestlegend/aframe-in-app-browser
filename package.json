@@ -23,7 +23,7 @@
   },
   "devDependencies": {
     "concurrently": "^3.6.1",
-    "electron": "^2.0.8",
+    "electron": "^2.0.1",
     "socket.io": "^2.1.1",
     "socket.io-client": "^2.1.1",
     "uglifyjs-webpack-plugin": "^1.2.7",
